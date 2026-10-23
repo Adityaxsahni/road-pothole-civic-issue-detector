@@ -1,5 +1,7 @@
 # CivicPulse — Road Pothole & Civic Issue Detector
 
+**Live demo:** https://civicpulse-9nkf.onrender.com (Render free tier, so the first visit after idle takes about a minute to wake up). Demo logins are listed below.
+
 CivicPulse is a citizen-reporting and city-operations platform. Residents report potholes and other civic issues from their phone in under a minute; AI classifies the problem and estimates severity, duplicates are merged automatically, and city staff work from a ranked, explainable priority queue with hotspot maps and analytics.
 
 ![stack](https://img.shields.io/badge/Next.js-16-black) ![stack](https://img.shields.io/badge/PostgreSQL-Prisma-336791) ![stack](https://img.shields.io/badge/AI-YOLO%20%7C%20built--in-1d4ed8)

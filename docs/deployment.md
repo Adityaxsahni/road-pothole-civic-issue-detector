@@ -33,16 +33,20 @@ docker run --rm -e DATABASE_URL=… civicpulse-tools npx prisma migrate deploy
 
 `docker-compose.yml` wires this together locally: `db` → `migrate` (migrate and seed if empty) → `web`, plus the optional `ai` profile.
 
-## Render (Blueprint, recommended)
+## Render (Blueprint, free)
 
-1. Push the repository to GitHub. Then either click the **Deploy to Render** button in the README, or go to Render → **New → Blueprint** and select the repository.
-2. Render reads `render.yaml` and creates:
-   * **civicpulse-db**: PostgreSQL 16 (free plan; it expires after 30 days, so upgrade to keep data).
-   * **civicpulse**: a Node web service (Starter plan, required for the disk) with a 1 GB disk at `/opt/render/project/src/storage/uploads`.
+1. Click the **Deploy to Render** button in the README, or go to Render → **New → Blueprint** and select the repository.
+2. Render reads `render.yaml` and creates, on free plans:
+   * **civicpulse-db**: PostgreSQL 16.
+   * **civicpulse**: a Node web service with photos stored in PostgreSQL (`STORAGE_PROVIDER=database`), because free instances have no persistent disk.
    * Generated `NEXTAUTH_SECRET` and `CRON_SECRET`, with `DATABASE_URL` wired from the database.
-3. Click **Apply**. The build runs `npm ci && npm run build`. The start command, `npm run start:bootstrap`, migrates the database, seeds demo data on the first boot only, and starts the server. The first boot takes about a minute longer while demo photos are generated.
-4. Open the service URL (`https://civicpulse-xxxx.onrender.com`). `NEXTAUTH_URL` defaults to Render’s `RENDER_EXTERNAL_URL`, so no manual URL setup is needed. Set it explicitly if you add a custom domain.
-5. Maintenance runs in-process (`ENABLE_INTERNAL_SCHEDULER=true`), so no cron service is required.
+3. Click **Apply**. The build runs `npm ci && npm run build`. The start command, `npm run start:bootstrap`, migrates the database, seeds demo data on the first boot only, and starts the server.
+4. Open the service URL (`https://civicpulse-xxxx.onrender.com`). `NEXTAUTH_URL` defaults to Render’s `RENDER_EXTERNAL_URL`. Set it explicitly if you add a custom domain.
+5. Maintenance runs in-process (`ENABLE_INTERNAL_SCHEDULER=true`) while the service is awake.
+
+**Free-tier limits.** The service sleeps after about 15 minutes idle, and the next request takes roughly a minute to wake it. The free Render database expires after 30 days. To keep data, upgrade the database plan or set `DATABASE_URL` to a free Neon or Supabase Postgres (the app migrates and seeds it on the next boot).
+
+**Paid upgrade.** Change the web plan to `starter`, add a disk (`disk: { name: uploads, mountPath: /opt/render/project/src/storage/uploads, sizeGB: 1 }`) and set `STORAGE_PROVIDER=local` with `UPLOAD_DIR` pointing at the mount, or use `STORAGE_PROVIDER=s3`.
 
 For a real (non-demo) city deployment, set `SHOW_DEMO_ACCOUNTS=false` and `SKIP_DEMO_SEED=true` before the first deploy, then create staff accounts.
 

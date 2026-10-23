@@ -1,8 +1,13 @@
-# Render Blueprint — one-click deploy of CivicPulse (web app + PostgreSQL + persistent photo disk).
+# Render Blueprint — free one-click deploy of CivicPulse (web app + PostgreSQL).
 # Render dashboard → New → Blueprint → select this repository → Apply.
 #
-# Cost notes: persistent disks require a paid instance (Starter). The free Postgres plan expires
-# after 30 days — upgrade the database plan (e.g. basic-256mb) to keep data beyond that.
+# Free-tier notes:
+#  * The free web service sleeps after ~15 min idle; the next visit takes ~1 min to wake up.
+#  * Free instances have no persistent disk, so photos are stored in PostgreSQL
+#    (STORAGE_PROVIDER=database).
+#  * The free Render PostgreSQL database expires after 30 days. Upgrade its plan, or point
+#    DATABASE_URL at a free Neon/Supabase database, to keep data longer.
+# For a paid setup with a photo disk, see docs/deployment.md.
 
 databases:
   - name: civicpulse-db
@@ -16,18 +21,14 @@ services:
   - type: web
     name: civicpulse
     runtime: node
-    plan: starter
+    plan: free
     region: singapore
     buildCommand: npm ci --include=dev && npm run build
     # Migrates, seeds demo data on the very first boot (only when the database is empty), then
-    # starts the standalone server. Runs on the instance so the seed can write to the photo disk.
+    # starts the standalone server.
     startCommand: npm run start:bootstrap
     healthCheckPath: /api/health
     autoDeploy: true
-    disk:
-      name: uploads
-      mountPath: /opt/render/project/src/storage/uploads
-      sizeGB: 1
     envVars:
       - key: NODE_VERSION
         value: "22"
@@ -39,9 +40,11 @@ services:
         generateValue: true
       - key: CRON_SECRET
         generateValue: true
-      - key: UPLOAD_DIR
-        value: /opt/render/project/src/storage/uploads
-      # Hotspot/priority/analytics maintenance runs in-process every 15 minutes.
+      - key: STORAGE_PROVIDER
+        value: database
+      - key: MAX_VIDEO_MB
+        value: "15"
+      # Hotspot/priority/analytics maintenance runs in-process while the service is awake.
       - key: ENABLE_INTERNAL_SCHEDULER
         value: "true"
       # Public demo: show one-click demo logins. Set to "false" for a real deployment.

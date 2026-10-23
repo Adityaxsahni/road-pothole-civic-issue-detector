@@ -89,7 +89,7 @@ Every variable is documented in [`.env.example`](.env.example). Only variables p
 | `NEXTAUTH_SECRET` | ✅ | Session signing secret (`openssl rand -base64 32`) |
 | `NEXTAUTH_URL` | ✅ | Public base URL of the app |
 | `ALLOW_PUBLIC_REGISTRATION` | | Allow citizen self-sign-up (default `true`) |
-| `STORAGE_PROVIDER` | | `local` (default) or `s3` |
+| `STORAGE_PROVIDER` | | `local` (default), `s3`, or `database` (photos in Postgres, for free hosting) |
 | `UPLOAD_DIR` | | Local media directory (default `./storage/uploads`) |
 | `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_FORCE_PATH_STYLE`, `S3_PREFIX` | | S3-compatible storage (AWS S3, R2, MinIO, Supabase) |
 | `MAX_IMAGE_MB`, `MAX_VIDEO_MB` | | Upload limits (10 / 50) |
@@ -123,7 +123,7 @@ docs/                 Architecture, API reference, deployment guide
 
 ## Testing
 
-* **Unit (62 tests):** scoring and severity, the dedup engine, DBSCAN and hotspots, geo helpers, perceptual hashing, analytics snapshots and repeat zones, CSV escaping, rate limiting, validation, file-type sniffing, image normalisation (metadata stripping) and detector accuracy on synthetic scenes.
+* **Unit (65 tests):** scoring and severity, the dedup engine, DBSCAN and hotspots, geo helpers, perceptual hashing, analytics snapshots and repeat zones, CSV escaping, rate limiting, validation, database media storage, file-type sniffing, image normalisation (metadata stripping) and detector accuracy on synthetic scenes.
 * **End-to-end (9 tests):** the landing page and map; route protection; the full citizen wizard on desktop and a Pixel 7 profile (AI suggestion → category → mocked GPS → validation → submit → confirmation); dashboard KPIs; queue filtering, triage notes and resolving; CSV export; analytics.
 * **AI service:** `cd ai-service && pip install -r requirements-dev.txt && pytest`.
 
@@ -131,7 +131,7 @@ docs/                 Architecture, API reference, deployment guide
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Adityaxsahni/road-pothole-civic-issue-detector)
 
-The included [`render.yaml`](render.yaml) Blueprint provisions everything: the web app, PostgreSQL, a persistent photo disk, generated secrets, migrations, a first-boot demo seed and the in-app maintenance scheduler.
+The included [`render.yaml`](render.yaml) Blueprint deploys everything on Render's **free** plans: the web app, PostgreSQL (photos are stored in the database, since free instances have no disk), generated secrets, migrations, a first-boot demo seed and the in-app maintenance scheduler.
 
 See [docs/deployment.md](docs/deployment.md) for Docker, Render/Railway/Fly.io and Vercel instructions, the production checklist and scheduled jobs. In short:
 

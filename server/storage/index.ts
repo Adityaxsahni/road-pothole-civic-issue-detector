@@ -1,5 +1,7 @@
 import "server-only";
+import { prisma } from "../db";
 import { env } from "../env";
+import { DatabaseStorageProvider } from "./database";
 import { LocalStorageProvider } from "./local";
 import { S3StorageProvider } from "./s3";
 import type { StorageProvider } from "./types";
@@ -14,6 +16,9 @@ export function storage(): StorageProvider {
   if (!provider) {
     const config = env();
     switch (config.STORAGE_PROVIDER) {
+      case "database":
+        provider = new DatabaseStorageProvider(prisma);
+        break;
       case "s3":
         if (!config.S3_BUCKET) throw new Error("STORAGE_PROVIDER=s3 requires S3_BUCKET");
         provider = new S3StorageProvider({

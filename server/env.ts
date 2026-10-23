@@ -13,7 +13,7 @@ const schema = z.object({
     .string()
     .optional()
     .transform((v) => v !== "false"),
-  STORAGE_PROVIDER: z.enum(["local", "s3"]).default("local"),
+  STORAGE_PROVIDER: z.enum(["local", "s3", "database"]).default("local"),
   UPLOAD_DIR: z.string().default("./storage/uploads"),
   S3_BUCKET: z.string().optional(),
   S3_REGION: z.string().default("auto"),

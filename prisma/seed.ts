@@ -315,6 +315,7 @@ const CITIZENS = [
 async function wipe() {
   await prisma.$transaction([
     prisma.notification.deleteMany(),
+    prisma.storedFile.deleteMany(),
     prisma.analyticsSummary.deleteMany(),
     prisma.hotspotCluster.deleteMany(),
     prisma.teamAssignment.deleteMany(),

@@ -418,3 +418,13 @@ model Notification {
   @@index([municipalityId, createdAt])
   @@index([userId, readAt])
 }
+
+/// Media bytes for STORAGE_PROVIDER=database — lets free hosting tiers without persistent disks
+/// or object storage keep uploads in PostgreSQL. Keys mirror the filesystem/S3 layout.
+model StoredFile {
+  key         String   @id
+  data        Bytes
+  contentType String
+  size        Int
+  createdAt   DateTime @default(now())
+}

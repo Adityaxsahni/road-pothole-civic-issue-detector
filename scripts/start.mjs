@@ -27,6 +27,9 @@ loadEnvFile();
 // Platforms like Render expose the public URL at runtime; use it when NEXTAUTH_URL isn't set.
 process.env.NEXTAUTH_URL ||= process.env.RENDER_EXTERNAL_URL;
 process.env.UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR ?? "storage/uploads");
+// The standalone server binds to $HOSTNAME, which hosts like Render set to the container name;
+// listen on all interfaces so the platform proxy can reach it (override with BIND_HOST).
+process.env.HOSTNAME = process.env.BIND_HOST || "0.0.0.0";
 process.env.NODE_ENV = "production";
 
 const server = spawn(process.execPath, [path.join(standalone, "server.js")], {

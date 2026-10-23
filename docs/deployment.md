@@ -33,7 +33,20 @@ docker run --rm -e DATABASE_URL=… civicpulse-tools npx prisma migrate deploy
 
 `docker-compose.yml` wires this together locally: `db` → `migrate` (migrate and seed if empty) → `web`, plus the optional `ai` profile.
 
-## Render / Railway / Fly.io
+## Render (Blueprint, recommended)
+
+1. Push the repository to GitHub. Then either click the **Deploy to Render** button in the README, or go to Render → **New → Blueprint** and select the repository.
+2. Render reads `render.yaml` and creates:
+   * **civicpulse-db**: PostgreSQL 16 (free plan; it expires after 30 days, so upgrade to keep data).
+   * **civicpulse**: a Node web service (Starter plan, required for the disk) with a 1 GB disk at `/opt/render/project/src/storage/uploads`.
+   * Generated `NEXTAUTH_SECRET` and `CRON_SECRET`, with `DATABASE_URL` wired from the database.
+3. Click **Apply**. The build runs `npm ci && npm run build`. The start command, `npm run start:bootstrap`, migrates the database, seeds demo data on the first boot only, and starts the server. The first boot takes about a minute longer while demo photos are generated.
+4. Open the service URL (`https://civicpulse-xxxx.onrender.com`). `NEXTAUTH_URL` defaults to Render’s `RENDER_EXTERNAL_URL`, so no manual URL setup is needed. Set it explicitly if you add a custom domain.
+5. Maintenance runs in-process (`ENABLE_INTERNAL_SCHEDULER=true`), so no cron service is required.
+
+For a real (non-demo) city deployment, set `SHOW_DEMO_ACCOUNTS=false` and `SKIP_DEMO_SEED=true` before the first deploy, then create staff accounts.
+
+## Railway / Fly.io
 
 1. Create a PostgreSQL instance and copy its connection string.
 2. Deploy from the repository using the `Dockerfile` (target `runner`).

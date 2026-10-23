@@ -67,6 +67,7 @@ npm run dev
 | `npm run demo` | One command: embedded Postgres, migrate, seed (if empty), dev server |
 | `npm run dev` | Next.js dev server |
 | `npm run build` / `npm start` | Production build / run the standalone server locally |
+| `npm run start:bootstrap` | Production entrypoint: migrate, seed demo data if empty, start |
 | `npm run db:start` | Run the embedded PostgreSQL on its own (foreground) |
 | `npm run setup` | Prepare an existing database (migrate + seed if empty) |
 | `npm run db:migrate` | Create/apply a new migration in development |
@@ -97,6 +98,8 @@ Every variable is documented in [`.env.example`](.env.example). Only variables p
 | `URGENT_PRIORITY_THRESHOLD` | | Priority that triggers urgent alerts (75) |
 | `NOTIFY_WEBHOOK_URL`, `NOTIFY_EMAIL_TO`, `NOTIFY_SMS_TO` | | Alert channels (webhook is Slack-compatible; email/SMS are logged mocks) |
 | `CRON_SECRET` | | Bearer token for `/api/cron/recompute` |
+| `ENABLE_INTERNAL_SCHEDULER`, `SCHEDULER_INTERVAL_MIN` | | Run maintenance in-process on long-running servers (every 15 min by default) |
+| `SKIP_DEMO_SEED` | | With `npm run start:bootstrap`, start with an empty database instead of demo data |
 | `ENABLE_REVERSE_GEOCODING`, `GEOCODER_USER_AGENT` | | Server-side Nominatim address lookup (off by default) |
 | `NEXT_PUBLIC_MAP_TILE_URL`, `NEXT_PUBLIC_MAP_ATTRIBUTION` | | Map tiles (OpenStreetMap by default, no key) |
 | `SHOW_DEMO_ACCOUNTS` | | Show demo login buttons in production builds |
@@ -125,6 +128,10 @@ docs/                 Architecture, API reference, deployment guide
 * **AI service:** `cd ai-service && pip install -r requirements-dev.txt && pytest`.
 
 ## Deployment
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Adityaxsahni/road-pothole-civic-issue-detector)
+
+The included [`render.yaml`](render.yaml) Blueprint provisions everything: the web app, PostgreSQL, a persistent photo disk, generated secrets, migrations, a first-boot demo seed and the in-app maintenance scheduler.
 
 See [docs/deployment.md](docs/deployment.md) for Docker, Render/Railway/Fly.io and Vercel instructions, the production checklist and scheduled jobs. In short:
 

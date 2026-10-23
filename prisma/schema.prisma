@@ -1,0 +1,420 @@
+// CivicPulse data model.
+// Geospatial queries use indexed lat/lng bounding boxes + haversine in the
+// application layer, so plain PostgreSQL is enough (PostGIS is optional; see docs/architecture.md).
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CITIZEN
+  STAFF
+  ADMIN
+}
+
+enum ReportStatus {
+  NEW
+  VERIFIED
+  ASSIGNED
+  IN_PROGRESS
+  RESOLVED
+  REJECTED
+  DUPLICATE
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+enum DedupStatus {
+  UNIQUE
+  SUSPECTED
+  DUPLICATE
+}
+
+enum RoadType {
+  HIGHWAY
+  ARTERIAL
+  COLLECTOR
+  LOCAL
+  UNKNOWN
+}
+
+enum TrafficLevel {
+  LOW
+  MODERATE
+  HEAVY
+  UNKNOWN
+}
+
+enum ActivityType {
+  CREATED
+  STATUS_CHANGE
+  NOTE
+  ASSIGNMENT
+  DUPLICATE
+  AI_ANALYSIS
+  PRIORITY
+  NOTIFICATION
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS
+  WEBHOOK
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model Municipality {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  state       String?
+  country     String   @default("IN")
+  timezone    String   @default("Asia/Kolkata")
+  centerLat   Float
+  centerLng   Float
+  defaultZoom Int      @default(12)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users         User[]
+  teams         Team[]
+  neighborhoods Neighborhood[]
+  reports       Report[]
+  hotspots      HotspotCluster[]
+  summaries     AnalyticsSummary[]
+  notifications Notification[]
+}
+
+model Neighborhood {
+  id             String       @id @default(cuid())
+  municipalityId String
+  municipality   Municipality @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
+  name           String
+  centerLat      Float
+  centerLng      Float
+  /// Approximate service radius in metres; reports are assigned to the nearest centroid within it.
+  radiusM        Int          @default(2500)
+  createdAt      DateTime     @default(now())
+
+  reports  Report[]
+  hotspots HotspotCluster[]
+
+  @@unique([municipalityId, name])
+}
+
+model User {
+  id             String        @id @default(cuid())
+  email          String        @unique
+  name           String
+  passwordHash   String
+  role           Role          @default(CITIZEN)
+  phone          String?
+  municipalityId String?
+  municipality   Municipality? @relation(fields: [municipalityId], references: [id], onDelete: SetNull)
+  teamId         String?
+  team           Team?         @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  reports           Report[]         @relation("ReportAuthor")
+  assignedReports   Report[]         @relation("ReportAssignee")
+  activity          StatusLog[]
+  assignmentsMade   TeamAssignment[] @relation("AssignmentCreator")
+  assignmentsHeld   TeamAssignment[] @relation("AssignmentAssignee")
+  notifications     Notification[]
+
+  @@index([role])
+}
+
+model Team {
+  id             String       @id @default(cuid())
+  municipalityId String
+  municipality   Municipality @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  /// Category slugs this crew normally handles (used for suggestions in the assign dialog).
+  specialties    String[]
+  color          String       @default("#2563eb")
+  createdAt      DateTime     @default(now())
+
+  members     User[]           @relation("TeamMembers")
+  assignments TeamAssignment[]
+
+  @@unique([municipalityId, name])
+}
+
+model IssueCategory {
+  id           String   @id @default(cuid())
+  slug         String   @unique
+  name         String
+  description  String
+  icon         String
+  color        String
+  /// Inherent hazard weight 0-100 used as the starting point for severity.
+  baseSeverity Int
+  /// Target resolution time used for SLA tracking.
+  slaHours     Int
+  /// Categories in the same group count as partial matches during deduplication.
+  group        String
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  reports      Report[] @relation("ReportCategory")
+  aiSuggested  Report[] @relation("ReportAiCategory")
+  hotspots     HotspotCluster[]
+}
+
+model Report {
+  id             String        @id @default(cuid())
+  /// Human-friendly reference shown to citizens, e.g. CP-7K3D9Q.
+  refCode        String        @unique
+  userId         String
+  user           User          @relation("ReportAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  municipalityId String
+  municipality   Municipality  @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
+  neighborhoodId String?
+  neighborhood   Neighborhood? @relation(fields: [neighborhoodId], references: [id], onDelete: SetNull)
+
+  title       String
+  description String
+  notes       String?
+
+  categoryId           String
+  category             IssueCategory  @relation("ReportCategory", fields: [categoryId], references: [id])
+  aiSuggestedCategoryId String?
+  aiSuggestedCategory   IssueCategory? @relation("ReportAiCategory", fields: [aiSuggestedCategoryId], references: [id])
+  /// true = citizen accepted the AI suggestion, false = overrode it, null = no suggestion available.
+  aiAccepted            Boolean?
+
+  status        ReportStatus @default(NEW)
+  severity      Severity
+  severityScore Float
+  priorityScore Float
+  /// Explainable factor breakdown produced by lib/scoring.ts.
+  priorityBreakdown Json
+  confidence    Float?
+
+  latitude  Float
+  longitude Float
+  accuracyM Float?
+  address   String?
+  roadType     RoadType     @default(UNKNOWN)
+  trafficLevel TrafficLevel @default(UNKNOWN)
+
+  dedupStatus      DedupStatus     @default(UNIQUE)
+  duplicateOfId    String?
+  duplicateOf      Report?         @relation("Duplicates", fields: [duplicateOfId], references: [id], onDelete: SetNull)
+  duplicates       Report[]        @relation("Duplicates")
+  duplicateScore   Float?
+  duplicateGroupId String?
+  duplicateGroup   DuplicateGroup? @relation("GroupMembers", fields: [duplicateGroupId], references: [id], onDelete: SetNull)
+  /// Number of reports merged into this one (citizen corroboration).
+  duplicateCount   Int             @default(0)
+
+  assignedToId String?
+  assignedTo   User?     @relation("ReportAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  resolvedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  media        MediaAsset[]
+  detections   DetectionResult[]
+  activity     StatusLog[]
+  assignments  TeamAssignment[]
+  primaryOf    DuplicateGroup?   @relation("GroupPrimary")
+  notifications Notification[]
+
+  @@index([municipalityId, status])
+  @@index([latitude, longitude])
+  @@index([createdAt])
+  @@index([categoryId])
+  @@index([priorityScore])
+  @@index([userId])
+  @@index([duplicateOfId])
+}
+
+model MediaAsset {
+  id              String    @id @default(cuid())
+  reportId        String
+  report          Report    @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  type            MediaType
+  url             String
+  storageKey      String
+  thumbnailUrl    String?
+  mimeType        String
+  sizeBytes       Int
+  width           Int?
+  height          Int?
+  storageProvider String
+  /// 64-bit perceptual difference hash (hex) used for near-duplicate image matching.
+  phash           String?
+  /// True for images derived from another asset (e.g. a video poster frame).
+  derived         Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+
+  detections DetectionResult[]
+
+  @@index([reportId])
+}
+
+model DetectionResult {
+  id              String      @id @default(cuid())
+  reportId        String
+  report          Report      @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  mediaAssetId    String?
+  mediaAsset      MediaAsset? @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  modelName       String
+  modelVersion    String
+  label           String
+  confidence      Float
+  /// Normalised {x, y, w, h} in 0..1 image coordinates.
+  boundingBox     Json?
+  severityScore   Float
+  damageAreaRatio Float?
+  latencyMs       Int?
+  raw             Json?
+  createdAt       DateTime    @default(now())
+
+  @@index([reportId])
+}
+
+model DuplicateGroup {
+  id              String   @id @default(cuid())
+  primaryReportId String   @unique
+  primaryReport   Report   @relation("GroupPrimary", fields: [primaryReportId], references: [id], onDelete: Cascade)
+  /// Human-readable explanation of why reports were grouped.
+  reason          String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  /// Related reports (relatedReportIds is derived from this relation).
+  reports Report[] @relation("GroupMembers")
+}
+
+model StatusLog {
+  id             String        @id @default(cuid())
+  reportId       String
+  report         Report        @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  type           ActivityType  @default(STATUS_CHANGE)
+  status         ReportStatus
+  previousStatus ReportStatus?
+  note           String?
+  /// Public entries are shown to the reporting citizen; internal notes are staff-only.
+  isPublic       Boolean       @default(true)
+  actorId        String?
+  actor          User?         @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  meta           Json?
+  createdAt      DateTime      @default(now())
+
+  @@index([reportId, createdAt])
+}
+
+model TeamAssignment {
+  id           String    @id @default(cuid())
+  reportId     String
+  report       Report    @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  teamId       String
+  team         Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  assigneeId   String?
+  assignee     User?     @relation("AssignmentAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  assignedById String?
+  assignedBy   User?     @relation("AssignmentCreator", fields: [assignedById], references: [id], onDelete: SetNull)
+  note         String?
+  dueAt        DateTime?
+  active       Boolean   @default(true)
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([reportId, active])
+  @@index([teamId, active])
+}
+
+model HotspotCluster {
+  id                 String         @id @default(cuid())
+  municipalityId     String
+  municipality       Municipality   @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
+  neighborhoodId     String?
+  neighborhood       Neighborhood?  @relation(fields: [neighborhoodId], references: [id], onDelete: SetNull)
+  dominantCategoryId String?
+  dominantCategory   IssueCategory? @relation(fields: [dominantCategoryId], references: [id], onDelete: SetNull)
+  label              String
+  rank               Int
+  centerLat          Float
+  centerLng          Float
+  /// Radius in metres.
+  radius             Float
+  issueCount         Int
+  openCount          Int
+  severityScore      Float
+  riskScore          Float
+  recommendedAction  String
+  reportIds          String[]
+  createdAt          DateTime       @default(now())
+
+  @@index([municipalityId, rank])
+}
+
+model AnalyticsSummary {
+  id                 String       @id @default(cuid())
+  municipalityId     String
+  municipality       Municipality @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
+  /// UTC calendar day this snapshot represents.
+  date               DateTime     @db.Date
+  totalReports       Int
+  newReports         Int
+  resolvedReports    Int
+  openReports        Int
+  duplicateReports   Int
+  criticalOpen       Int
+  avgSeverity        Float
+  avgResolutionHours Float?
+  byCategory         Json
+  bySeverity         Json
+  createdAt          DateTime     @default(now())
+
+  @@unique([municipalityId, date])
+}
+
+model Notification {
+  id             String              @id @default(cuid())
+  municipalityId String?
+  municipality   Municipality?       @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
+  reportId       String?
+  report         Report?             @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel        NotificationChannel
+  status         NotificationStatus  @default(PENDING)
+  title          String
+  body           String
+  severity       Severity?
+  error          String?
+  readAt         DateTime?
+  sentAt         DateTime?
+  createdAt      DateTime            @default(now())
+
+  @@index([municipalityId, createdAt])
+  @@index([userId, readAt])
+}

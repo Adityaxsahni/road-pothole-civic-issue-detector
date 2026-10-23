@@ -1,0 +1,79 @@
+# Full local stack:   docker compose up --build
+# With YOLO service:  docker compose --profile ai up --build   (and set AI_SERVICE_URL=http://ai:8000)
+#
+# Open http://localhost:3000 — demo accounts are created on first start.
+
+x-app-env: &app-env
+  DATABASE_URL: postgresql://civicpulse:civicpulse@db:5432/civicpulse?schema=public
+  NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+  NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-docker-dev-secret-change-me-0123456789}
+  CRON_SECRET: ${CRON_SECRET:-docker-dev-cron-secret}
+  UPLOAD_DIR: /app/storage/uploads
+  AI_SERVICE_URL: ${AI_SERVICE_URL:-}
+  NOTIFY_WEBHOOK_URL: ${NOTIFY_WEBHOOK_URL:-}
+  NOTIFY_EMAIL_TO: ${NOTIFY_EMAIL_TO:-ops@example.gov}
+  ENABLE_REVERSE_GEOCODING: ${ENABLE_REVERSE_GEOCODING:-false}
+  SHOW_DEMO_ACCOUNTS: ${SHOW_DEMO_ACCOUNTS:-true}
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: civicpulse
+      POSTGRES_PASSWORD: civicpulse
+      POSTGRES_DB: civicpulse
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U civicpulse"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # One-shot: apply migrations, then seed demo data if the database is empty.
+  migrate:
+    build:
+      context: .
+      target: builder
+    # Runs as root; hands the shared uploads volume to the runtime user (uid 1001) afterwards.
+    command: sh -c "npx prisma migrate deploy && SEED_IF_EMPTY=true npx prisma db seed && chown -R 1001:1001 /app/storage/uploads"
+    environment:
+      <<: *app-env
+      NODE_ENV: development
+    volumes:
+      - uploads:/app/storage/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      target: runner
+    environment: *app-env
+    ports:
+      - "3000:3000"
+    volumes:
+      - uploads:/app/storage/uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  ai:
+    profiles: ["ai"]
+    build:
+      context: ./ai-service
+      args:
+        INSTALL_YOLO: ${INSTALL_YOLO:-false}
+    environment:
+      YOLO_WEIGHTS: ${YOLO_WEIGHTS:-/app/weights/best.pt}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./ai-service/weights:/app/weights:ro
+
+volumes:
+  pgdata:
+  uploads:

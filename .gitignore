@@ -1,0 +1,32 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# env
+.env
+.env.local
+.env.*.local
+
+# local data
+storage/uploads/
+.data/
+
+# testing
+coverage/
+playwright-report/
+test-results/
+blob-report/
+
+# python
+ai-service/.venv/
+ai-service/**/__pycache__/
+ai-service/weights/*.pt
+
+# misc
+.DS_Store
+*.log
